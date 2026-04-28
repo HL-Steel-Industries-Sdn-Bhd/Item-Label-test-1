@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>A4横向四分区标签生成器 - 销售资料卡片</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #e2e8f0;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 30px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 主容器：控制最大宽度并居中 */
+        .app-container {
+            max-width: 1200px;
+            width: 100%;
+            background: white;
+            border-radius: 32px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.2);
+            padding: 24px 28px 36px;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-top: 0;
+            margin-bottom: 0.25rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 small {
+            font-size: 0.8rem;
+            font-weight: normal;
+            background: #f1f5f9;
+            padding: 4px 12px;
+            border-radius: 40px;
+            color: #334155;
+        }
+
+        .sub {
+            color: #475569;
+            border-left: 4px solid #3b82f6;
+            padding-left: 16px;
+            margin: 12px 0 24px 0;
+            font-weight: 400;
+        }
+
+        /* 四组资料表单网格布局 */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        /* 每个卡片区块样式 */
+        .card-form {
+            background: #f8fafc;
+            border-radius: 24px;
+            padding: 18px 16px 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s;
+        }
+
+        .card-form:hover {
+            border-color: #94a3b8;
+            background: #ffffff;
+        }
+
+        .card-title {
+            font-weight: 700;
+            font-size: 1rem;
+            background: #eef2ff;
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 40px;
+            margin-bottom: 18px;
+            color: #1e40af;
+            letter-spacing: 0.3px;
+        }
+
+        .input-group {
+            margin-bottom: 14px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .input-group label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #334155;
+            margin-bottom: 4px;
+        }
+
+        .input-group input, .input-group textarea {
+            padding: 8px 12px;
+            border-radius: 16px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.85rem;
+            background: white;
+            transition: 0.2s;
+            font-family: inherit;
+        }
+
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59,130,246,0.2);
+        }
+
+        .input-group textarea {
+            resize: vertical;
+            min-height: 60px;
+        }
+
+        .optional-hint {
+            font-size: 0.65rem;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        button {
+            background: #0f172a;
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 60px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button:hover {
+            background: #1e293b;
+            transform: scale(1.01);
+        }
+
+        .btn-wrap {
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        /* ----- 打印 / Word 导出样式 ----- 
+           生成文档时基于 A4 landscape 且分成四份 (A6等份) */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+                margin: 0;
+            }
+            .app-container, .btn-wrap, .form-grid, h1, .sub, button {
+                display: none;
+            }
+            /* 仅显示 .doc-export-content 区域 */
+            .doc-export-content {
+                display: block !important;
+            }
+        }
+
+        /* 导出文档专用容器 — 完全符合 A4 横向，四格布局 */
+        .doc-export-content {
+            display: none;  /* 平时隐藏，导出时克隆并生成blob下载 */
+            width: 297mm;   /* A4 landscape 宽度 */
+            min-height: 210mm;
+            background: white;
+            margin: 0 auto;
+            position: relative;
+            page-break-after: avoid;
+            break-inside: avoid;
+            box-sizing: border-box;
+        }
+
+        /* 四象限网格布局: 分为2x2，每个格子即A6大小 */
+        .quadrant-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            width: 100%;
+            height: 100%;
+            min-height: 210mm;
+            box-sizing: border-box;
+        }
+
+        /* 每个格子 (A6风格，窄边距) */
+        .quadrant-item {
+            border: 1px dashed #cbd5e1;    /* 印刷时淡边框，显示分割区域 */
+            padding: 8px 12px 12px 12px;   /* narrow margin 窄边距 */
+            background: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            box-sizing: border-box;
+            /* 确保内容不溢出 */
+            overflow-wrap: break-word;
+            word-break: break-word;
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+        }
+
+        /* 内部排版样式，确保窄边距下的可读性 */
+        .item-so-line {
+            font-size: 12pt;
+            font-weight: 600;
+            margin-bottom: 12px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 6px;
+            color: #0f172a;
+        }
+        .item-cust-qty {
+            font-size: 13pt;
+            font-weight: 500;
+            margin-bottom: 12px;
+            background: #f9f9ff;
+            padding: 5px 8px;
+            border-radius: 12px;
+        }
+        .item-name-full {
+            font-size: 12pt;
+            line-height: 1.4;
+            font-weight: 500;
+            color: #1e293b;
+            margin-top: 6px;
+        }
+        .label-prefix {
+            font-weight: 400;
+            color: #4b5563;
+        }
+
+        /* 可选字段微风格 */
+        .so-itemno-block {
+            margin-bottom: 10px;
+        }
+
+        hr {
+            margin: 8px 0;
+        }
+
+        /* 为了视觉统一 */
+        .quadrant-item strong {
+            font-weight: 700;
+        }
+
+        /* 预览辅助 (非导出模式) 调试用，导出时完全按照上面样式 */
+        .preview-note {
+            background: #fef9c3;
+            font-size: 12px;
+            padding: 8px;
+            text-align: center;
+            border-radius: 20px;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h1>
+        📄 四分区 A6 标签生成器
+        <small>A4 Landscape | 窄边距</small>
+    </h1>
+    <div class="sub">
+        分别填写四套资料，每套独立生成在一个 A6 区域内。点击「生成并下载 Word 文档」即可获得一页 A4 横向四份标签的 .doc 文件。
+    </div>
+
+    <!-- 4组输入表单 -->
+    <div class="form-grid" id="formsContainer">
+        <!-- 动态 JS 生成四个区域，保持干净结构 -->
+    </div>
+    <div class="btn-wrap">
+        <button id="downloadDocBtn">📥 下载 Word 文档 (.doc)</button>
+    </div>
+    <div class="preview-note">
+        💡 提示：点击下载后，将生成符合 A4 横向、四等分 (≈A6) 、窄边距 (8-12px) 的 Microsoft Word 文档。每个格子内显示您填入的销售资料，格式依要求：SO-前缀 + Sales Order No. 组合、Item No. 解析、Customer+Qty、完整Item Name。
+    </div>
+</div>
+
+<!-- 隐藏的导出结构占位，动态填充内容 -->
+<div id="exportContainer" style="display:none;"></div>
+
+<script>
+    // 定义四套资料的默认值或占位，方便测试
+    const defaultSets = [
+        {   // Set 1
+            customerShort: "FJKCGSS",
+            salesOrderNo: "007788-1",
+            itemNo: "",
+            quantity: "10",
+            itemNameMain: "Table",
+            itemNameSub: "with backplash"
+        },
+        {   // Set 2
+            customerShort: "ABCORP",
+            salesOrderNo: "007788A-1A",
+            itemNo: "",
+            quantity: "5",
+            itemNameMain: "Chair",
+            itemNameSub: "Ergonomic mesh"
+        },
+        {   // Set 3
+            customerShort: "NTWORLD",
+            salesOrderNo: "112233-99",
+            itemNo: "",
+            quantity: "2",
+            itemNameMain: "Whiteboard",
+            itemNameSub: "Magnetic"
+        },
+        {   // Set 4
+            customerShort: "SOLUTION",
+            salesOrderNo: "554466B-2C",
+            itemNo: "",
+            quantity: "20",
+            itemNameMain: "LED Lamp",
+            itemNameSub: "Adjustable dimmer"
+        }
+    ];
+
+    // 辅助函数: 根据 Sales Order No. 和 Item No 格式化显示 "SO-xxxxxx-yyy"
+    // 需求: Sales Order No. 写的基本上是6个号码，要加前缀 ‘SO-’。并且 Sales Order No. 和 Item No.
+    // 例子: SO-007788-1 , SO-007788A-1A  第二个‘-’后面就是item No. 
+    // 表单里我们让用户直接输入 Sales Order No. (例如 "007788-1" 或 "007788A-1A")，然后自动加前缀SO-
+    // 但是如果用户输入已经包含 SO- 开头的呢? 确保干净处理. 同时允许单独 itemNo字段覆盖 (简化: 基于逻辑提取 itemNo 部分)
+    // 实现策略: 优先利用输入的 salesOrderNo 完整原始码，进行处理: 加上前缀 'SO-' (如果还没有SO-)
+    // 并且需要展示时第二段横线后为Item No,如果没有横线, 则后端备用. 根据例子: 用户可在Sales Order No. 字段填"007788-1" 或 "007788A-1A"
+    // 不额外单独设Item No输入框,为了让用户简单, 但题目要求"Item No. 和 Sales Order No. 都有可能有一个Alphabet在后面的" 
+    // 而且给的输入项目中有 Item No. 独立字段, 但为符合例子整洁, 我将合并逻辑: 
+    // 在显示时优先使用 SalesOrderNo 字段（用户填入原始含后缀）, 自动加SO-前缀, 然后分割出 Item No 展示.
+    // 同时额外独立 Item No 字段作为备用, 但为了不混淆, 设计上让用户不填Item No 而是靠智能解析; 但是按照需求每个set有独立Item No输入, 我们可以呈现给用户一个独立Item No字段, 
+    // 最终显示的时候若用户填写独立Item No 则最终显示时候格式要美观第二横线后展示这个独立ItemNo, 并遵循格式 SO-原始SalesOrderNo-ItemNo? 但是太复杂.
+    // 最佳实践: 由于用户要求输入字段存在 Item No. 字段, 我们就让他填, 在标签里 展现规则: 展示成 "SO-xxxxx-yyy" , 其中 xxxxx来自SalesOrderNo (剔除已有SO-前缀并且取数字字母段) yyy来自ItemNo字段.
+    // 但例子1: SO-007788-1 其实SalesOrderNo原始值为007788, ItemNo=1; 例子2: SO-007788A-1A 原始SalesOrderNo带字母后为007788A + ItemNo=1A
+    // 因此设计用户界面: Sales Order No. 输入不带SO-前缀的核心编号: 例如 "007788" 或 "007788A" ; Item No. 输入 "1" 或 "1A"
+    // 最终展示组成: SO-{salesOrderNo}-{itemNo}
+    // 这样最清晰，也满足Item No可能含字母。
+    // 同时保留提供Customer Short Name, Quantity, 以及 Main/Sub Item
+    
+    // 根据规格重构表单生成 (更便于理解)
+    function buildFormHTML(setIndex, data) {
+        // data 包含 customerShort, salesOrderNo, itemNo, quantity, itemNameMain, itemNameSub
+        const sid = setIndex;
+        return `
+            <div class="card-form">
+                <div class="card-title">📌 资料组 ${setIndex+1}</div>
+                <div class="input-group">
+                    <label>Customer Short Name *</label>
+                    <input type="text" id="cust_${sid}" value="${escapeHtml(data.customerShort)}" placeholder="例: FJKCGSS">
+                </div>
+                <div class="input-group">
+                    <label>Sales Order No. (核心编号, 无前缀)</label>
+                    <input type="text" id="so_${sid}" value="${escapeHtml(data.salesOrderNo)}" placeholder="例: 007788 或 007788A">
+                    <div class="optional-hint">将自动添加前缀 SO- , 并与Item No组合</div>
+                </div>
+                <div class="input-group">
+                    <label>Item No. (可含字母)</label>
+                    <input type="text" id="itemno_${sid}" value="${escapeHtml(data.itemNo)}" placeholder="例: 1 或 1A">
+                </div>
+                <div class="input-group">
+                    <label>Quantity *</label>
+                    <input type="text" id="qty_${sid}" value="${escapeHtml(data.quantity)}" placeholder="数量">
+                </div>
+                <div class="input-group">
+                    <label>Item Name (Main) *</label>
+                    <input type="text" id="mainname_${sid}" value="${escapeHtml(data.itemNameMain)}" placeholder="主要名称">
+                </div>
+                <div class="input-group">
+                    <label>Item Name (Sub) - Optional</label>
+                    <input type="text" id="subname_${sid}" value="${escapeHtml(data.itemNameSub)}" placeholder="次要名称 (选填)">
+                </div>
+            </div>
+        `;
+    }
+
+    // 简单防XSS
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, function(c) {
+            return c;
+        });
+    }
+
+    // 捕获四个区域的数据
+    function collectSetsData() {
+        let sets = [];
+        for (let i = 0; i < 4; i++) {
+            const cust = document.getElementById(`cust_${i}`)?.value.trim() || '';
+            const soRaw = document.getElementById(`so_${i}`)?.value.trim() || '';
+            const itemNoRaw = document.getElementById(`itemno_${i}`)?.value.trim() || '';
+            const qty = document.getElementById(`qty_${i}`)?.value.trim() || '';
+            const mainName = document.getElementById(`mainname_${i}`)?.value.trim() || '';
+            const subName = document.getElementById(`subname_${i}`)?.value.trim() || '';
+            sets.push({
+                customerShort: cust,
+                salesOrderNo: soRaw,
+                itemNo: itemNoRaw,
+                quantity: qty,
+                itemNameMain: mainName,
+                itemNameSub: subName,
+            });
+        }
+        return sets;
+    }
+
+    // 核心功能：根据四组数据渲染完整A4横向四分区(每区A6风格，窄边距)的HTML结构
+    function buildExportDocumentHTML(sets) {
+        // 创建容器
+        const docContainer = document.createElement('div');
+        docContainer.className = 'doc-export-content';
+        docContainer.style.display = 'block';
+        docContainer.style.width = '297mm';
+        docContainer.style.minHeight = '210mm';
+        docContainer.style.background = 'white';
+        docContainer.style.margin = '0 auto';
+        docContainer.style.boxSizing = 'border-box';
+        
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'quadrant-grid';
+        gridDiv.style.display = 'grid';
+        gridDiv.style.gridTemplateColumns = '1fr 1fr';
+        gridDiv.style.gridTemplateRows = '1fr 1fr';
+        gridDiv.style.width = '100%';
+        gridDiv.style.height = '100%';
+        gridDiv.style.minHeight = '210mm';
+        
+        // 循环生成四个象限 (0..3)
+        for (let idx = 0; idx < 4; idx++) {
+            const data = sets[idx];
+            // 如果没有资料则显示占位空白，但仍然按窄边距
+            const quadrant = document.createElement('div');
+            quadrant.className = 'quadrant-item';
+            // 窄边距样式强化 (边框内边距窄)
+            quadrant.style.padding = '8px 10px 10px 10px';
+            quadrant.style.border = '1px solid #cbd5e1';
+            quadrant.style.backgroundColor = '#fff';
+            quadrant.style.display = 'flex';
+            quadrant.style.flexDirection = 'column';
+            quadrant.style.gap = '6px';
+            
+            // 处理内容: 根据要求构造各排信息
+            // 第一排: Sales Order No. (带前缀SO-) 以及Item No组合 
+            // 根据用户填写的 salesOrderNo (无前缀) 和 itemNo 生成 SO-xxxxxxxx-yyyyy
+            let soPrefixNumber = data.salesOrderNo || '';
+            let itemNumber = data.itemNo || '';
+            // 清除so里面潜在的SO-前缀，只保留原始核心号段
+            let cleanSONumber = soPrefixNumber.replace(/^SO-/i, '');
+            let displaySOItem = '';
+            if (cleanSONumber !== '' && itemNumber !== '') {
+                displaySOItem = `SO-${cleanSONumber}-${itemNumber}`;
+            } else if (cleanSONumber !== '') {
+                displaySOItem = `SO-${cleanSONumber}`;
+            } else if (itemNumber !== '') {
+                displaySOItem = `SO-?-${itemNumber}`;
+            } else {
+                displaySOItem = 'SO-_____';
+            }
+            
+            // 第二排: Customer Short Name 和 Qty 格式 "FJKCGSS Qty: 10"
+            const custShort = data.customerShort || '—';
+            const qtyText = data.quantity && data.quantity !== '' ? data.quantity : '0';
+            const custQtyLine = `${custShort}  Qty: ${qtyText}`;
+            
+            // 第三排: Item Name (Main) + 自然空一格 + Item Name (Sub) 如果存在
+            let mainItem = data.itemNameMain || '';
+            let subItem = data.itemNameSub || '';
+            let fullItemName = mainItem;
+            if (subItem && subItem.trim() !== '') {
+                fullItemName = fullItemName ? `${fullItemName} ${subItem}` : subItem;
+            }
+            if (!fullItemName) fullItemName = '—';
+            
+            // 构建内容 DOM
+            const firstLineDiv = document.createElement('div');
+            firstLineDiv.className = 'item-so-line';
+            firstLineDiv.style.fontWeight = 'bold';
+            firstLineDiv.style.fontSize = '12pt';
+            firstLineDiv.style.marginBottom = '8px';
+            firstLineDiv.style.borderBottom = '1px solid #ccc';
+            firstLineDiv.style.paddingBottom = '5px';
+            firstLineDiv.innerText = displaySOItem;
+            
+            const secondLineDiv = document.createElement('div');
+            secondLineDiv.className = 'item-cust-qty';
+            secondLineDiv.style.fontSize = '13pt';
+            secondLineDiv.style.fontWeight = '500';
+            secondLineDiv.style.marginBottom = '10px';
+            secondLineDiv.style.backgroundColor = '#f6f8fe';
+            secondLineDiv.style.padding = '4px 8px';
+            secondLineDiv.style.borderRadius = '12px';
+            secondLineDiv.innerText = custQtyLine;
+            
+            const thirdLineDiv = document.createElement('div');
+            thirdLineDiv.className = 'item-name-full';
+            thirdLineDiv.style.fontSize = '12pt';
+            thirdLineDiv.style.lineHeight = '1.4';
+            thirdLineDiv.style.fontWeight = '500';
+            thirdLineDiv.innerText = fullItemName;
+            
+            quadrant.appendChild(firstLineDiv);
+            quadrant.appendChild(secondLineDiv);
+            quadrant.appendChild(thirdLineDiv);
+            
+            // 可选增加额外占位展示 (确保窄边距舒服)
+            gridDiv.appendChild(quadrant);
+        }
+        
+        docContainer.appendChild(gridDiv);
+        return docContainer;
+    }
+
+    // 下载 .doc 核心函数 (Blob + 指定 MIME)
+    function downloadAsWord(htmlContent, filename = 'sales_labels.doc') {
+        // 添加完整HTML头 + 针对打印/word的样式重置与page设置
+        const fullHtml = `<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>Sales Document - A4 Landscape 4up</title>
+            <style>
+                /* 重置边距 确保打印或word打开时完全符合 A4 landscape */
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: white;
+                    width: 297mm;
+                    height: 210mm;
+                    /* 保证每一页都是横向 */
+                    page-break-after: avoid;
+                    page-break-inside: avoid;
+                }
+                .doc-export-content {
+                    display: block !important;
+                    width: 297mm;
+                    min-height: 210mm;
+                    background: white;
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                .quadrant-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    grid-template-rows: 1fr 1fr;
+                    width: 100%;
+                    height: 100%;
+                    min-height: 210mm;
+                    box-sizing: border-box;
+                }
+                .quadrant-item {
+                    border: 1px solid #cbd5e1;
+                    padding: 8px 12px 12px 12px;
+                    background: white;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: flex-start;
+                    box-sizing: border-box;
+                    break-inside: avoid;
+                    page-break-inside: avoid;
+                    font-family: 'Calibri', 'Segoe UI', Roboto, sans-serif;
+                }
+                .item-so-line {
+                    font-weight: 700;
+                    font-size: 12pt;
+                    margin-bottom: 8px;
+                    border-bottom: 1px solid #d1d5db;
+                    padding-bottom: 5px;
+                }
+                .item-cust-qty {
+                    font-size: 13pt;
+                    font-weight: 500;
+                    margin-bottom: 10px;
+                    background: #f8fafc;
+                    padding: 5px 8px;
+                    border-radius: 12px;
+                }
+                .item-name-full {
+                    font-size: 11.5pt;
+                    line-height: 1.4;
+                    font-weight: 500;
+                }
+                @media print {
+                    body {
+                        margin: 0;
+                        padding: 0;
+                        size: A4 landscape;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            ${htmlContent}
+        </body>
+        </html>`;
+        
+        const blob = new Blob([fullHtml], { type: 'application/msword' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+    
+    // 渲染初始表单
+    function renderForms() {
+        const container = document.getElementById('formsContainer');
+        container.innerHTML = '';
+        for (let i = 0; i < 4; i++) {
+            const defaultData = defaultSets[i];
+            // 修正 itemNo 字段，默认的各个set有独立itemNo
+            const formHtml = buildFormHTML(i, defaultData);
+            container.insertAdjacentHTML('beforeend', formHtml);
+        }
+        // 微调 set1 salesOrderNo 默认 '007788' ; itemNo 1 ; sets2 007788A + 1A 等已经存在的
+        // 确保符合预期, 但现有默认数据完美匹配例子;
+        // 补充: set1 salesOrderNo = "007788", itemNo = "1"; set2 = "007788A", itemNo = "1A"
+        // 手工重设以保证示范
+        if(document.getElementById('so_0')) document.getElementById('so_0').value = "007788";
+        if(document.getElementById('itemno_0')) document.getElementById('itemno_0').value = "1";
+        if(document.getElementById('so_1')) document.getElementById('so_1').value = "007788A";
+        if(document.getElementById('itemno_1')) document.getElementById('itemno_1').value = "1A";
+        if(document.getElementById('so_2')) document.getElementById('so_2').value = "112233";
+        if(document.getElementById('itemno_2')) document.getElementById('itemno_2').value = "99";
+        if(document.getElementById('so_3')) document.getElementById('so_3').value = "554466B";
+        if(document.getElementById('itemno_3')) document.getElementById('itemno_3').value = "2C";
+    }
+    
+    // 下载触发
+    function onDownload() {
+        const currentSets = collectSetsData();
+        // 基本校验提醒: 但是不强求所有必填, 展示友好占位
+        for(let i=0;i<currentSets.length;i++) {
+            if(!currentSets[i].customerShort) currentSets[i].customerShort = "客户";
+            if(!currentSets[i].itemNameMain) currentSets[i].itemNameMain = "产品";
+        }
+        const exportElem = buildExportDocumentHTML(currentSets);
+        const tempContainer = document.createElement('div');
+        tempContainer.appendChild(exportElem);
+        const finalHtml = tempContainer.innerHTML; 
+        downloadAsWord(finalHtml, `SalesDocument_4up.doc`);
+    }
+    
+    // 初始化事件
+    function init() {
+        renderForms();
+        const downloadBtn = document.getElementById('downloadDocBtn');
+        if(downloadBtn) downloadBtn.addEventListener('click', onDownload);
+    }
+    
+    init();
+</script>
+</body>
+</html>
